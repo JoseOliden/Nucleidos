@@ -2,13 +2,13 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# Cargar tabla de nucleidos (ejemplo simple)
-@st.cache_data
 def cargar_datos():
-    df = pd.read_csv("tabla_nucleidos.csv")  # Asegúrate de tener este archivo
-    return df
+    archivo = st.file_uploader("Sube el archivo 'tabla_nucleidos.csv'", type="csv")
+    if archivo is not None:
+        return pd.read_csv(archivo)
+    else:
+        st.stop()
 
-# Buscar por símbolo y retornar Z
 def buscar_Z(df, simbolo):
     fila = df[df['Simbolo'] == simbolo]
     if not fila.empty:
@@ -27,13 +27,12 @@ def main():
             st.warning("Elemento no encontrado.")
             return
         
-        # Filtrar nucleidos en una ventana (Z ±3 y A ±3)
         ventana = df[(df['Z'] >= Z_central - 3) & (df['Z'] <= Z_central + 3)]
         
         fig = px.scatter(
             ventana, x="A", y="Z", 
             text="Simbolo",
-            color="Estabilidad",  # Puede ser 'Estable', 'Inestable', etc.
+            color="Estabilidad",
             color_discrete_map={"Estable": "green", "Inestable": "red"},
             title=f"Nucleidos alrededor de {simbolo}",
             labels={"A": "Número de masa (A)", "Z": "Número atómico (Z)"}
