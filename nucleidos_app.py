@@ -1,87 +1,61 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 
-def cargar_datos():
-    archivo = st.file_uploader("Sube el archivo 'tabla_nucleidos.csv'", type="csv")
-    if archivo is not None:
-        return pd.read_csv(archivo)
-    else:
+@st.cache_data
+def load_data():
+    return pd.read_csv("iaea_chart.csv")
+
+def main():
+    st.title("🎯 Chart of Nuclides (IAEA style)")
+
+    df = load_data()
+    df['DecayType'] = df['decay']  # ajustar según columna
+    elemento = st.text_input("Elemento (símbolo, ej. Fe)").capitalize()
+    if not elemento:
+        st.info("Ingresa un símbolo para iniciar.")
         st.stop()
 
-def buscar_Z(df, simbolo):
-    fila = df[df['Simbolo'] == simbolo]
-    if not fila.empty:
-        return fila['Z'].values[0]
-    return None
+    # obtener Z del elemento
+    Z0 = df[df['symbol']==elemento]['Z'].unique()
+    if len(Z0)==0:
+        st.warning("Elemento no encontrado.")
+        st.stop()
+    Z0 = int(Z0[0])
 
-def graficar_grilla(df_filtrado, simbolo):
+    # ventana de Z ±5
+    ventana = df[(df['Z']>=Z0-5)&(df['Z']<=Z0+5)]
+
+    # mapeo de color según estabilidad/decay
+    def color_map(dec):
+        return {
+            'stable': 'black',
+            'beta-': 'red',
+            'beta+': 'blue',
+            'alpha': 'purple',
+        }.get(dec, 'lightgray')
+
+    ventana['color'] = ventana['DecayType'].apply(color_map)
+
     fig = go.Figure()
-
-    colores = {"Estable": "green", "Inestable": "red"}
-
-    for _, row in df_filtrado.iterrows():
-        color = colores.get(row["Estabilidad"], "gray")
-        label = f"{row['Simbolo']}-{int(row['A'])}"
+    for _, r in ventana.iterrows():
         fig.add_trace(go.Scatter(
-            x=[row["A"]],
-            y=[row["Z"]],
-            mode="markers+text",
-            marker=dict(color=color, size=28, line=dict(color='black', width=1)),
-            text=[label],
-            textposition="middle center",
+            x=[r['A']], y=[r['Z']],
+            text=r['symbol'],
+            mode='markers+text',
+            marker=dict(symbol='square', size=20, color=r['color'], line=dict(width=1)),
+            textfont=dict(color="white", size=12),
             showlegend=False
         ))
-
     fig.update_layout(
-        title=f"Tabla de Nucleidos alrededor de {simbolo}",
-        xaxis_title="Número de masa (A)",
-        yaxis_title="Número atómico (Z)",
-        yaxis=dict(autorange='reversed'),
-        height=600,
+        xaxis_title="A (número de masa)",
+        yaxis_title="Z (número atómico)",
+        yaxis=dict(autorange="reversed", dtick=1),
+        xaxis=dict(dtick=1),
+        height=700, width=900,
         plot_bgcolor="white",
-        margin=dict(l=40, r=40, t=60, b=40)
     )
     st.plotly_chart(fig)
 
-def main():
-    st.title("🌟 Explorador Interactivo de la Tabla de Nucleidos")
-    df = cargar_datos()
-
-    simbolo = st.text_input("Ingresa el símbolo del elemento (Ej: Fe):").capitalize()
-    
-    if simbolo:
-        Z_central = buscar_Z(df, simbolo)
-        if Z_central is None:
-            st.warning("Elemento no encontrado.")
-            return
-        
-        # Filtrar ventana de elementos cercanos
-        ventana = df[(df['Z'] >= Z_central - 3) & (df['Z'] <= Z_central + 3)]
-        
-        # Mostrar tabla interactiva (scatter)
-        st.subheader("📊 Diagrama Z vs A")
-        fig = px.scatter(
-            ventana, x="A", y="Z", 
-            text="Simbolo",
-            color="Estabilidad",
-            color_discrete_map={"Estable": "green", "Inestable": "red"},
-            labels={"A": "Número de masa (A)", "Z": "Número atómico (Z)"}
-        )
-        fig.update_traces(textposition='top center')
-        fig.update_layout(height=500)
-        st.plotly_chart(fig)
-
-        # Mostrar grilla tipo tabla de nucleidos
-        st.subheader("🧩 Grilla de nucleidos tipo tabla")
-        graficar_grilla(ventana, simbolo)
-
-        # Mostrar tabla
-        st.subheader("📋 Datos de nucleidos")
-        st.dataframe(ventana[["Z", "A", "Simbolo", "Nombre", "Estabilidad"]])
-    else:
-        st.info("Ingresa un símbolo para comenzar.")
-
-if __name__ == "__main__":
+if __name__=="__main__":
     main()
