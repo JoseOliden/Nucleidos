@@ -2,60 +2,81 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 
-@st.cache_data
 def load_data():
-    return pd.read_csv("iaea_chart.csv")
+    archivo = st.file_uploader("📂 Sube el archivo CSV con datos nucleares", type="csv")
+    if archivo is not None:
+        df = pd.read_csv(archivo)
+        return df
+    else:
+        st.info("Por favor, sube un archivo CSV para continuar.")
+        st.stop()
+
+def color_map(dec):
+    if isinstance(dec, str):
+        dec = dec.lower()
+    return {
+        'stable': 'black',
+        'beta-': 'red',
+        'beta+': 'blue',
+        'alpha': 'purple',
+        'isomer': 'orange',
+    }.get(dec, 'lightgray')
 
 def main():
-    st.title("🎯 Chart of Nuclides (IAEA style)")
+    st.title("🔬 Visualizador de la Tabla de Nucleidos (tipo IAEA)")
 
     df = load_data()
-    df['DecayType'] = df['decay']  # ajustar según columna
-    elemento = st.text_input("Elemento (símbolo, ej. Fe)").capitalize()
-    if not elemento:
-        st.info("Ingresa un símbolo para iniciar.")
-        st.stop()
 
-    # obtener Z del elemento
-    Z0 = df[df['symbol']==elemento]['Z'].unique()
-    if len(Z0)==0:
-        st.warning("Elemento no encontrado.")
-        st.stop()
-    Z0 = int(Z0[0])
+    simbolo = st.text_input("🔎 Ingresa el símbolo del elemento (Ej: Fe):").capitalize()
+    if simbolo:
+        fila = df[df["Simbolo"] == simbolo]
+        if fila.empty:
+            st.warning("Elemento no encontrado.")
+            st.stop()
 
-    # ventana de Z ±5
-    ventana = df[(df['Z']>=Z0-5)&(df['Z']<=Z0+5)]
+        Z_central = fila["Z"].values[0]
 
-    # mapeo de color según estabilidad/decay
-    def color_map(dec):
-        return {
-            'stable': 'black',
-            'beta-': 'red',
-            'beta+': 'blue',
-            'alpha': 'purple',
-        }.get(dec, 'lightgray')
+        # Filtrar nucleidos vecinos
+        vecinos = df[(df["Z"] >= Z_central - 5) & (df["Z"] <= Z_central + 5)]
 
-    ventana['color'] = ventana['DecayType'].apply(color_map)
+        # Agregar color a cada nucleido
+        vecinos["Color"] = vecinos["Decaimiento"].apply(color_map)
 
-    fig = go.Figure()
-    for _, r in ventana.iterrows():
-        fig.add_trace(go.Scatter(
-            x=[r['A']], y=[r['Z']],
-            text=r['symbol'],
-            mode='markers+text',
-            marker=dict(symbol='square', size=20, color=r['color'], line=dict(width=1)),
-            textfont=dict(color="white", size=12),
-            showlegend=False
-        ))
-    fig.update_layout(
-        xaxis_title="A (número de masa)",
-        yaxis_title="Z (número atómico)",
-        yaxis=dict(autorange="reversed", dtick=1),
-        xaxis=dict(dtick=1),
-        height=700, width=900,
-        plot_bgcolor="white",
-    )
-    st.plotly_chart(fig)
+        # Gráfico tipo grilla
+        fig = go.Figure()
 
-if __name__=="__main__":
+        for _, r in vecinos.iterrows():
+            texto = f"{r['Simbolo']}-{int(r['A'])}<br>{r['Tiempo_decaimiento']}"
+            fig.add_trace(go.Scatter(
+                x=[r["A"]],
+                y=[r["Z"]],
+                mode="markers+text",
+                marker=dict(symbol="square", size=30, color=r["Color"], line=dict(width=1)),
+                text=[texto],
+                textposition="middle center",
+                textfont=dict(color="white", size=10),
+                hovertext=f"{r['Nombre']} ({r['Simbolo']}-{r['A']})\nDecaimiento: {r['Decaimiento']}\nT½: {r['Tiempo_decaimiento']}",
+                hoverinfo="text",
+                showlegend=False
+            ))
+
+        fig.update_layout(
+            title=f"🧩 Nucleidos alrededor de {simbolo}",
+            xaxis_title="Número de masa (A)",
+            yaxis_title="Número atómico (Z)",
+            yaxis=dict(autorange='reversed', dtick=1),
+            xaxis=dict(dtick=1),
+            height=700,
+            plot_bgcolor="white",
+        )
+        st.plotly_chart(fig)
+
+        # Mostrar la tabla
+        st.subheader("📋 Tabla de nucleidos cercanos")
+        st.dataframe(vecinos[["Z", "A", "Simbolo", "Nombre", "Estabilidad", "Decaimiento", "Tiempo_decaimiento"]])
+
+    else:
+        st.info("Ingresa el símbolo de un elemento para comenzar.")
+
+if __name__ == "__main__":
     main()
